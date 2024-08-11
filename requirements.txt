@@ -4,3 +4,51 @@ mypy==1.10.0
 curses
 cryptography
 requests
+
+
+# Functional Requirements for Python Password Manager
+
+1. Passwortspeicherung:
+   - Sichere und verschlüsselte Speicherung von Benutzernamen, Passwörtern und zugehörigen Website-URLs.
+   - Verschlüsselung der gespeicherten Daten mit einem starken Algorithmus (z.B. AES-256).
+   - Möglichkeit, zusätzliche Informationen zu speichern (z.B. Notizen, Kategorien).
+   - Verschlüsselte Speicherung von Metadaten wie z.B. Erstelldatum und Uhrzeit.
+
+2. Passwortverlauf:
+   - Speicherung von älteren Passwortversionen, um die Wiederverwendung von Passwörtern zu verhindern und bei Bedarf auf ältere Passwörter zurückgreifen zu können.
+
+3. Passwortgenerierung:
+   - Generierung sicherer, zufälliger Passwörter mit konfigurierbarer Länge und Zeichensatz (Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen).
+   - Anpassung der Passwortstärke (z.B. Ausschluss bestimmter Zeichen, Erzwingen bestimmter Muster).
+
+4. Passwortabruf:
+   - Suche und Anzeige gespeicherter Passwörter anhand von Website-URLs oder Suchbegriffen.
+   - Anzeige von Benutzernamen und zusätzlichen Informationen.
+
+5. Passwortbearbeitung:
+   - Änderung von Benutzernamen, Passwörtern und zusätzlichen Informationen.
+   - Löschen von gespeicherten Passwörtern.
+
+6. Master-Passwort:
+   - Schutz der gespeicherten Daten durch ein Master-Passwort.
+   - Sichere Speicherung des Master-Passworts (z.B. Hashing).
+
+7. Benutzeroberfläche:
+   - Intuitive Menüführung über die Konsole.
+   - Klare Anweisungen und Fehlermeldungen.
+   - Steuerung über Pfeiltasten oder alternative Eingabemethoden.
+
+8. Nutzermanagement:
+   - Erstellung von mehreren Accounts mit jeweils eigenem Master-Passwort.
+
+9. Import/Export:
+   - Export und Import der Passwörter in ein Textformat (z.B. CSV oder JSON).
+
+10. Passwortprüfung:
+    - Überprüfung der Stärke von Passwörtern anhand gängiger Kriterien (z.B. Länge, Zeichensatz, Wiederverwendung).
+    - Warnung vor schwachen Passwörtern.
+    - Warnung bei gleichen Passwörtern.
+    - Warnung bei von Datenlecks betroffenen Passwörtern:
+      - Anbindung der Have I Been Pwned API.
+      - Überprüfung des Passworts über einen GET-Request zur API.
+    - Korrektes Verhalten, falls die API offline ist oder kein Internet zur Verfügung steht.
