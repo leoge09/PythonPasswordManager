@@ -8,114 +8,113 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 
-# ----- Encryption Manager -----
+
 class EncryptionManager:
     def __init__(self, password):
-        # Derive a key from the password
         self.key = hashlib.sha256(password.encode()).digest()
         self.backend = default_backend()
 
-    def encrypt(self, plaintext):
+    def encrypt(self, plainText):
         iv = os.urandom(16)
         cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv), backend=self.backend)
         encryptor = cipher.encryptor()
 
         padder = padding.PKCS7(algorithms.AES.block_size).padder()
-        padded_data = padder.update(plaintext.encode()) + padder.finalize()
+        paddedData = padder.update(plainText.encode()) + padder.finalize()
 
-        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-        return base64.b64encode(iv + ciphertext).decode('utf-8')
+        cipherText = encryptor.update(paddedData) + encryptor.finalize()
+        return base64.b64encode(iv + cipherText).decode('utf-8')
 
-    def decrypt(self, ciphertext):
-        raw_data = base64.b64decode(ciphertext)
-        iv = raw_data[:16]
+    def decrypt(self, cipherText):
+        rawData = base64.b64decode(cipherText)
+        iv = rawData[:16]
         cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv), backend=self.backend)
         decryptor = cipher.decryptor()
 
-        padded_plaintext = decryptor.update(raw_data[16:]) + decryptor.finalize()
+        paddedPlainText = decryptor.update(rawData[16:]) + decryptor.finalize()
         unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
-        plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+        plainText = unpadder.update(paddedPlainText) + unpadder.finalize()
 
-        return plaintext.decode('utf-8')
+        return plainText.decode('utf-8')
 
-# ----- User Management -----
+
 class UserManager:
-    def __init__(self, json_file):
-        self.json_file = json_file
-        if not os.path.exists(json_file):
-            with open(json_file, 'w') as file:
+    def __init__(self, jsonFile):
+        self.jsonFile = jsonFile
+        if not os.path.exists(jsonFile):
+            with open(jsonFile, 'w') as file:
                 json.dump({}, file)
-        self.users = self.load_users()
+        self.users = self.loadUsers()
     
-    def load_users(self):
-        with open(self.json_file, 'r') as file:
+    def loadUsers(self):
+        with open(self.jsonFile, 'r') as file:
             return json.load(file)
     
-    def save_users(self):
-        with open(self.json_file, 'w') as file:
+    def saveUsers(self):
+        with open(self.jsonFile, 'w') as file:
             json.dump(self.users, file)
     
-    def create_user(self, username, password):
+    def createUser(self, username, password):
         if username in self.users:
             return False
         
-        encryption_manager = EncryptionManager(password)
-        password_hash = encryption_manager.key
+        encryptionManager = EncryptionManager(password)
+        passwordHash = encryptionManager.key
         
-        self.users[username] = {'password_hash': base64.b64encode(password_hash).decode('utf-8')}
-        self.save_users()
+        self.users[username] = {'passwordHash': base64.b64encode(passwordHash).decode('utf-8')}
+        self.saveUsers()
         return True
     
     def authenticate(self, username, password):
         if username not in self.users:
             return False
         
-        stored_hash = base64.b64decode(self.users[username]['password_hash'])
-        encryption_manager = EncryptionManager(password)
-        return encryption_manager.key == stored_hash
+        storedHash = base64.b64decode(self.users[username]['passwordHash'])
+        encryptionManager = EncryptionManager(password)
+        return encryptionManager.key == storedHash
     
-    def get_user_password(self, username):
-        return base64.b64decode(self.users[username]['password_hash']) if username in self.users else None
+    def getUserPassword(self, username):
+        return base64.b64decode(self.users[username]['passwordHash']) if username in self.users else None
 
-# ----- Password Database -----
+
 class PasswordDatabase:
-    def __init__(self, json_file, encryption_manager):
-        self.json_file = json_file
-        self.encryption_manager = encryption_manager
-        if not os.path.exists(json_file):
-            with open(json_file, 'w') as file:
+    def __init__(self, jsonFile, encryptionManager):
+        self.jsonFile = jsonFile
+        self.encryptionManager = encryptionManager
+        if not os.path.exists(jsonFile):
+            with open(jsonFile, 'w') as file:
                 json.dump({}, file)
-        self.passwords = self.load_passwords()
+        self.passwords = self.loadPasswords()
 
-    def load_passwords(self):
-        with open(self.json_file, 'r') as file:
+    def loadPasswords(self):
+        with open(self.jsonFile, 'r') as file:
             return json.load(file)
 
-    def save_passwords(self):
-        with open(self.json_file, 'w') as file:
+    def savePasswords(self):
+        with open(self.jsonFile, 'w') as file:
             json.dump(self.passwords, file)
 
-    def add_password(self, service, username, password):
-        encrypted_password = self.encryption_manager.encrypt(password)
-        self.passwords[service] = {'username': username, 'password': encrypted_password}
-        self.save_passwords()
+    def addPassword(self, service, username, password):
+        encryptedPassword = self.encryptionManager.encrypt(password)
+        self.passwords[service] = {'username': username, 'password': encryptedPassword}
+        self.savePasswords()
 
-    def retrieve_password(self, service):
+    def retrievePassword(self, service):
         if service in self.passwords:
             record = self.passwords[service]
-            record['password'] = self.encryption_manager.decrypt(record['password'])
+            record['password'] = self.encryptionManager.decrypt(record['password'])
             return record
         return None
 
-    def delete_password(self, service):
+    def deletePassword(self, service):
         if service in self.passwords:
             del self.passwords[service]
-            self.save_passwords()
+            self.savePasswords()
             return True
         return False
 
-# ----- UI Functions -----
-def start_screen(stdscr):
+
+def startScreen(stdscr):
     stdscr.clear()
     stdscr.addstr(0, 0, "Welcome to the Password Manager")
     stdscr.addstr(2, 0, "1. Login")
@@ -124,7 +123,8 @@ def start_screen(stdscr):
     stdscr.refresh()
     return stdscr.getch()
 
-def login_screen(stdscr, user_manager):
+
+def loginScreen(stdscr, userManager):
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter your username: ")
@@ -133,7 +133,7 @@ def login_screen(stdscr, user_manager):
     stdscr.addstr(1, 0, "Enter your password: ")
     password = stdscr.getstr().decode('utf-8')
 
-    if user_manager.authenticate(username, password):
+    if userManager.authenticate(username, password):
         return username
     else:
         stdscr.addstr(3, 0, "Invalid credentials. Press any key to return to the main menu.")
@@ -141,7 +141,8 @@ def login_screen(stdscr, user_manager):
         stdscr.getch()
         return None
 
-def create_user_screen(stdscr, user_manager):
+
+def createUserScreen(stdscr, userManager):
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter your desired username: ")
@@ -150,7 +151,7 @@ def create_user_screen(stdscr, user_manager):
     stdscr.addstr(1, 0, "Enter your desired password: ")
     password = stdscr.getstr().decode('utf-8')
 
-    if user_manager.create_user(username, password):
+    if userManager.createUser(username, password):
         stdscr.addstr(3, 0, "User created successfully! Press any key to login.")
     else:
         stdscr.addstr(3, 0, "User creation failed (username might already exist). Press any key to return to the main menu.")
@@ -158,29 +159,31 @@ def create_user_screen(stdscr, user_manager):
     stdscr.refresh()
     stdscr.getch()
 
-def mainMenu(stdscr, username, password_db):
+
+def mainMenu(stdscr, username, passwordDb):
     menu = ['1. Add Password', '2. Retrieve Password', '3. Delete Password', '4. Logout']
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
 
         for idx, row in enumerate(menu):
-            x = w//2 - len(row)//2
-            y = h//2 - len(menu)//2 + idx
+            x = w // 2 - len(row) // 2
+            y = h // 2 - len(menu) // 2 + idx
             stdscr.addstr(y, x, row)
 
         key = stdscr.getch()
         
         if key == ord('1'):
-            addPassword(stdscr, password_db)
+            addPassword(stdscr, passwordDb)
         elif key == ord('2'):
-            retrievePassword(stdscr, password_db)
+            retrievePassword(stdscr, passwordDb)
         elif key == ord('3'):
-            deletePassword(stdscr, password_db)
+            deletePassword(stdscr, passwordDb)
         elif key == ord('4'):
             break
 
-def addPassword(stdscr, password_db):
+
+def addPassword(stdscr, passwordDb):
     curses.echo()
     
     stdscr.clear()
@@ -193,20 +196,21 @@ def addPassword(stdscr, password_db):
     stdscr.addstr(2, 0, "Enter password: ")
     password = stdscr.getstr().decode('utf-8')
     
-    password_db.add_password(service, username, password)
+    passwordDb.addPassword(service, username, password)
     
     stdscr.addstr(3, 0, "Password added successfully!")
     stdscr.refresh()
     stdscr.getch()
 
-def retrievePassword(stdscr, password_db):
+
+def retrievePassword(stdscr, passwordDb):
     curses.echo()
     
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter service/website name to retrieve password: ")
     service = stdscr.getstr().decode('utf-8')
     
-    record = password_db.retrieve_password(service)
+    record = passwordDb.retrievePassword(service)
     
     if record:
         stdscr.addstr(2, 0, f"Username: {record['username']}")
@@ -217,14 +221,15 @@ def retrievePassword(stdscr, password_db):
     stdscr.refresh()
     stdscr.getch()
 
-def deletePassword(stdscr, password_db):
+
+def deletePassword(stdscr, passwordDb):
     curses.echo()
     
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter service/website name to delete: ")
     service = stdscr.getstr().decode('utf-8')
     
-    success = password_db.delete_password(service)
+    success = passwordDb.deletePassword(service)
     
     if success:
         stdscr.addstr(2, 0, "Password deleted successfully.")
@@ -234,21 +239,22 @@ def deletePassword(stdscr, password_db):
     stdscr.refresh()
     stdscr.getch()
 
+
 def main(stdscr):
-    user_manager = UserManager('users.json')
+    userManager = UserManager('users.json')
     while True:
-        key = start_screen(stdscr)
+        key = startScreen(stdscr)
         
         if key == ord('1'):
-            username = login_screen(stdscr, user_manager)
+            username = loginScreen(stdscr, userManager)
             if username:
-                # Initialize the encryption manager with the user's password
-                password_db = PasswordDatabase('passwords.json', EncryptionManager(user_manager.get_user_password(username)))
-                mainMenu(stdscr, username, password_db)
+                passwordDb = PasswordDatabase('passwords.json', EncryptionManager(userManager.getUserPassword(username)))
+                mainMenu(stdscr, username, passwordDb)
         elif key == ord('2'):
-            create_user_screen(stdscr, user_manager)
+            createUserScreen(stdscr, userManager)
         elif key == ord('3'):
             break
+
 
 if __name__ == "__main__":
     curses.wrapper(main)
