@@ -4,6 +4,8 @@ import json
 import os
 import hashlib
 import base64
+import secrets
+import string
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -11,8 +13,12 @@ from cryptography.hazmat.primitives import padding
 # ----- Encryption Manager -----
 class EncryptionManager:
     def __init__(self, password):
-        # Derive a key from the password
-        self.key = hashlib.sha256(password.encode()).digest()
+        if isinstance(password, bytes):
+            # Wenn password bereits ein bytes-Objekt ist, verwenden wir es direkt.
+            self.key = password
+        else:
+            # Andernfalls kodieren wir es als String und generieren den Hash.
+            self.key = hashlib.sha256(password.encode()).digest()
         self.backend = default_backend()
 
     def encrypt(self, plaintext):
@@ -68,14 +74,27 @@ class UserManager:
     
     def authenticate(self, username, password):
         if username not in self.users:
+            print(f"Authenticate failed: Username {username} not found")
             return False
         
         stored_hash = base64.b64decode(self.users[username]['password_hash'])
         encryption_manager = EncryptionManager(password)
-        return encryption_manager.key == stored_hash
+        
+        if encryption_manager.key == stored_hash:
+            print(f"Authenticate succeeded for {username}")
+            return True
+        else:
+            print(f"Authenticate failed: Password does not match for {username}")
+            return False
     
     def get_user_password(self, username):
-        return base64.b64decode(self.users[username]['password_hash']) if username in self.users else None
+        if username in self.users:
+            password_hash = self.users[username]['password_hash']
+            print(f"Retrieved password hash for {username}: {password_hash}")
+            return base64.b64decode(password_hash)
+        else:
+            print(f"User {username} not found")
+            return None
 
 # ----- Password Database -----
 class PasswordDatabase:
@@ -113,6 +132,20 @@ class PasswordDatabase:
             self.save_passwords()
             return True
         return False
+
+    def generate_password(self, length=12, use_uppercase=True, use_digits=True, use_special=True):
+        characters = string.ascii_lowercase
+        if use_uppercase:
+            characters += string.ascii_uppercase
+        if use_digits:
+            characters += string.digits
+        if use_special:
+            characters += string.punctuation
+
+        if len(characters) == 0:
+            raise ValueError("No characters available for password generation")
+
+        return ''.join(secrets.choice(characters) for _ in range(length))
 
 # ----- UI Functions -----
 def start_screen(stdscr):
@@ -153,7 +186,7 @@ def create_user_screen(stdscr, user_manager):
     if user_manager.create_user(username, password):
         stdscr.addstr(3, 0, "User created successfully! Press any key to login.")
     else:
-        stdscr.addstr(3, 0, "User creation failed (username might already exist). Press any key to return to the main menu.")
+        stdscr.addstr(3, 0, "User creation failed. Username already exists. Press any key to return to the main menu.")
     
     stdscr.refresh()
     stdscr.getch()
@@ -189,13 +222,23 @@ def addPassword(stdscr, password_db):
     
     stdscr.addstr(1, 0, "Enter username: ")
     username = stdscr.getstr().decode('utf-8')
-    
-    stdscr.addstr(2, 0, "Enter password: ")
-    password = stdscr.getstr().decode('utf-8')
+
+    stdscr.addstr(2, 0, "Do you want to generate a secure password? (y/n): ")
+    generate = stdscr.getstr().decode('utf-8').lower()
+
+    if generate == 'y':
+        stdscr.addstr(3, 0, "Enter desired password length (default is 12): ")
+        length_input = stdscr.getstr().decode('utf-8')
+        length = int(length_input) if length_input.isdigit() else 12
+        password = password_db.generate_password(length=length)
+        stdscr.addstr(4, 0, f"Generated password: {password}")
+    else:
+        stdscr.addstr(3, 0, "Enter password: ")
+        password = stdscr.getstr().decode('utf-8')
     
     password_db.add_password(service, username, password)
     
-    stdscr.addstr(3, 0, "Password added successfully!")
+    stdscr.addstr(5, 0, "Password added successfully!")
     stdscr.refresh()
     stdscr.getch()
 
@@ -242,9 +285,15 @@ def main(stdscr):
         if key == ord('1'):
             username = login_screen(stdscr, user_manager)
             if username:
-                # Initialize the encryption manager with the user's password
-                password_db = PasswordDatabase('passwords.json', EncryptionManager(user_manager.get_user_password(username)))
-                mainMenu(stdscr, username, password_db)
+                password_hash = user_manager.get_user_password(username)
+                if password_hash:
+                    # Initialize the encryption manager with the user's password
+                    password_db = PasswordDatabase('passwords.json', EncryptionManager(password_hash))
+                    mainMenu(stdscr, username, password_db)
+                else:
+                    stdscr.addstr(4, 0, "Error loading user password.")
+                    stdscr.refresh()
+                    stdscr.getch()
         elif key == ord('2'):
             create_user_screen(stdscr, user_manager)
         elif key == ord('3'):
