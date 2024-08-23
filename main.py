@@ -10,8 +10,13 @@ from cryptography.hazmat.primitives import padding
 
 
 class EncryptionManager:
-    def __init__(self, password):
-        self.key = hashlib.sha256(password.encode()).digest()
+    def __init__(self, key_or_password):
+        if isinstance(key_or_password, str):
+            self.key = hashlib.sha256(key_or_password.encode()).digest()
+        elif isinstance(key_or_password, bytes):
+            self.key = key_or_password
+        else:
+            raise ValueError("Key or password must be a string or bytes object.")
         self.backend = default_backend()
 
     def encrypt(self, plainText):
@@ -75,6 +80,8 @@ class UserManager:
     
     def getUserPassword(self, username):
         return base64.b64decode(self.users[username]['passwordHash']) if username in self.users else None
+    
+    
 
 
 class PasswordDatabase:
