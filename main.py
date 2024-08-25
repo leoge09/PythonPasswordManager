@@ -104,7 +104,8 @@ class PasswordDatabase:
     def addPassword(self, service, username, password):
         encryptedPassword = self.encryptionManager.encrypt(password)
         encryptedUsername = self.encryptionManager.encrypt(username)
-        self.passwords[service] = {'username': encryptedUsername, 'password': encryptedPassword}
+        encryptedService = self.encryptionManager.encrypt(service)
+        self.passwords[encryptedService] = {'username': encryptedUsername, 'password': encryptedPassword}
         self.savePasswords()
 
     def retrievePassword(self, service):
@@ -112,6 +113,7 @@ class PasswordDatabase:
             record = self.passwords[service]
             record['password'] = self.encryptionManager.decrypt(record['password'])
             record['username'] = self.encryptionManager.decrypt(record['username'])
+            record['service'] = self.encryptionManager.decrypt(record['service'])
             return record
         return None
     
@@ -121,6 +123,8 @@ class PasswordDatabase:
             self.savePasswords()
             return True
         return False
+    
+
 
 
 def startScreen(stdscr):
@@ -216,9 +220,8 @@ def retrievePassword(stdscr, passwordDb):
     curses.echo()
     
     stdscr.clear()
-    stdscr.addstr(0, 0, "Enter service/website name to retrieve password: ")
-    service = stdscr.getstr().decode('utf-8')
-    
+    stdscr.addstr(0, 0, "From whitch service do you want to retrieve the password? ")
+
     record = passwordDb.retrievePassword(service)
     
     if record:
