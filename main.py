@@ -64,9 +64,9 @@ class UserManager:
             return False
         
         encryptionManager = EncryptionManager(password)
-        passwordHash = encryptionManager.key
+        masterPassword = encryptionManager.key
         
-        self.users[username] = {'passwordHash': base64.b64encode(passwordHash).decode('utf-8')}
+        self.users[username] = {'masterPassword': base64.b64encode(masterPassword).decode('utf-8')}
         self.saveUsers()
         return True
     
@@ -74,12 +74,12 @@ class UserManager:
         if username not in self.users:
             return False
         
-        storedHash = base64.b64decode(self.users[username]['passwordHash'])
+        storedHash = base64.b64decode(self.users[username]['masterPassword'])
         encryptionManager = EncryptionManager(password)
         return encryptionManager.key == storedHash
     
     def getUserPassword(self, username):
-        return base64.b64decode(self.users[username]['passwordHash']) if username in self.users else None
+        return base64.b64decode(self.users[username]['masterPassword']) if username in self.users else None
     
     
 
@@ -103,16 +103,18 @@ class PasswordDatabase:
 
     def addPassword(self, service, username, password):
         encryptedPassword = self.encryptionManager.encrypt(password)
-        self.passwords[service] = {'username': username, 'password': encryptedPassword}
+        encryptedUsername = self.encryptionManager.encrypt(username)
+        self.passwords[service] = {'username': encryptedUsername, 'password': encryptedPassword}
         self.savePasswords()
 
     def retrievePassword(self, service):
         if service in self.passwords:
             record = self.passwords[service]
             record['password'] = self.encryptionManager.decrypt(record['password'])
+            record['username'] = self.encryptionManager.decrypt(record['username'])
             return record
         return None
-
+    
     def deletePassword(self, service):
         if service in self.passwords:
             del self.passwords[service]
@@ -167,7 +169,7 @@ def createUserScreen(stdscr, userManager):
     stdscr.getch()
 
 
-def mainMenu(stdscr, username, passwordDb):
+def mainMenu(stdscr, userName, passwordDb):
     menu = ['1. Add Password', '2. Retrieve Password', '3. Delete Password', '4. Logout']
     while True:
         stdscr.clear()
