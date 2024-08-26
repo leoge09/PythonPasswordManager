@@ -80,8 +80,6 @@ class UserManager:
     
     def getUserPassword(self, username):
         return base64.b64decode(self.users[username]['masterPassword']) if username in self.users else None
-
-
 class PasswordDatabase:
     def __init__(self, jsonFile, encryptionManager):
         self.jsonFile = jsonFile
@@ -107,9 +105,9 @@ class PasswordDatabase:
         self.savePasswords()
 
     def retrievePassword(self, service):
-        
-        if service in self.passwords:
-            record = self.passwords[service]
+        encryptedService = self.encryptionManager.encrypt(service)
+        if encryptedService in self.passwords:
+            record = self.passwords[encryptedService]
             return {
                 'username': self.encryptionManager.decrypt(record['username']),
                 'password': self.encryptionManager.decrypt(record['password'])
@@ -117,8 +115,9 @@ class PasswordDatabase:
         return None
     
     def deletePassword(self, service):
-        if service in self.passwords:
-            del self.passwords[service]
+        encryptedService = self.encryptionManager.encrypt(service)
+        if encryptedService in self.passwords:
+            del self.passwords[encryptedService]
             self.savePasswords()
             return True
         return False
@@ -397,7 +396,7 @@ def main(stdscr):
         if option == 0:
             username = loginScreen(stdscr, userManager)
             if username:
-                passwordDb = PasswordDatabase('passwords.json', EncryptionManager(userManager.getUserPassword(username)))
+                passwordDb = PasswordDatabase(f'{username}_passwords.json', EncryptionManager(userManager.getUserPassword(username)))
                 mainMenu(stdscr, username, passwordDb)
         elif option == 1:
             createUserScreen(stdscr, userManager)
