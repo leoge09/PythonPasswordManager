@@ -80,6 +80,7 @@ class UserManager:
     
     def getUserPassword(self, username):
         return base64.b64decode(self.users[username]['masterPassword']) if username in self.users else None
+    
 class PasswordDatabase:
     def __init__(self, jsonFile, encryptionManager):
         self.jsonFile = jsonFile
@@ -105,9 +106,8 @@ class PasswordDatabase:
         self.savePasswords()
 
     def retrievePassword(self, service):
-        encryptedService = self.encryptionManager.encrypt(service)
-        if encryptedService in self.passwords:
-            record = self.passwords[encryptedService]
+        if service in self.passwords:
+            record = self.passwords[service]
             return {
                 'username': self.encryptionManager.decrypt(record['username']),
                 'password': self.encryptionManager.decrypt(record['password'])
@@ -115,9 +115,8 @@ class PasswordDatabase:
         return None
     
     def deletePassword(self, service):
-        encryptedService = self.encryptionManager.encrypt(service)
-        if encryptedService in self.passwords:
-            del self.passwords[encryptedService]
+        if service in self.passwords:
+            del self.passwords[service]
             self.savePasswords()
             return True
         return False
@@ -136,6 +135,12 @@ def showServices(stdscr, passwordDb):
     services = passwordDb.getServices()
     encrypted_services = list(passwordDb.passwords.keys())
     current_row = 0
+
+    if len(encrypted_services) < 1 :
+        stdscr.clear()
+        stdscr.addstr(0,0, "No passwords registered! Add one and try again.")
+        stdscr.refresh()
+        return None
 
     while True:
         stdscr.clear()
@@ -191,7 +196,7 @@ def startScreen(stdscr):
             current_row = (current_row + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
             return current_row
-        elif key == 27:  # Escape key
+        elif key == 27:  
             break
 
     return None
