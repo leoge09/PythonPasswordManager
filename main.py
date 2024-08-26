@@ -117,9 +117,8 @@ class PasswordDatabase:
         return None
     
     def deletePassword(self, service):
-        encrypted_service = self.encryptionManager.encrypt(service)
-        if encrypted_service in self.passwords:
-            del self.passwords[encrypted_service]
+        if service in self.passwords:
+            del self.passwords[service]
             self.savePasswords()
             return True
         return False
@@ -127,6 +126,12 @@ class PasswordDatabase:
     def getServices(self):
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
 
+def passwordGenerator(stdscr):
+    current_row = 0
+    stdscr.clear()
+    stdscr.addstr(1,0, "hier wird ein passwort generiert")
+
+    return 'Sicheres Passwort'
 
 def showServices(stdscr, passwordDb):
     services = passwordDb.getServices()
@@ -272,12 +277,80 @@ def addPassword(stdscr, passwordDb):
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter service/website name: ")
     service = stdscr.getstr().decode('utf-8')
-    
+
+    services = passwordDb.getServices() 
+    if service in services:
+        current_row = 0
+        menu = ["Yes", "No"]
+        while True:
+            stdscr.clear()
+            stdscr.addstr(1, 0, "This Service is already Registered! Do you want to Change the info?")
+            h, w = stdscr.getmaxyx()
+
+            for idx, row in enumerate(menu):
+                x = w // 2 - len(row) // 2
+                y = h // 2 - len(menu) // 2 + idx
+                if idx == current_row:
+                    stdscr.addstr(y, x, row, curses.A_REVERSE)
+                else:
+                    stdscr.addstr(y, x, row)
+
+            stdscr.refresh()
+
+            key = stdscr.getch()
+
+            if key == curses.KEY_UP:
+                current_row = (current_row - 1) % len(menu)
+            elif key == curses.KEY_DOWN:
+                current_row = (current_row + 1) % len(menu)
+            elif key == curses.KEY_ENTER or key in [10, 13]:
+                if current_row == 0:
+                    stdscr.clear()
+                    stdscr.addstr(1, 0, "Hier kann die Info gechanged werden, Muss implementiert werden!")
+                    return
+                elif current_row == 1:
+                    stdscr.clear()
+                    return
+            elif key == 27:  # Escape key
+                break
+ 
     stdscr.addstr(1, 0, "Enter username: ")
     username = stdscr.getstr().decode('utf-8')
     
-    stdscr.addstr(2, 0, "Enter password: ")
-    password = stdscr.getstr().decode('utf-8')
+    passwordMenu = ["Custom Password", "Generate Safe Password"]
+    current_row = 0
+
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+
+        for idx, row in enumerate(passwordMenu):
+            x = w // 2 - len(row) // 2
+            y = h // 2 - len(passwordMenu) // 2 + idx
+            if idx == current_row:
+                stdscr.addstr(y, x, row, curses.A_REVERSE)
+            else:
+                stdscr.addstr(y, x, row)
+
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if key == curses.KEY_UP:
+            current_row = (current_row - 1) % len(passwordMenu)
+        elif key == curses.KEY_DOWN:
+            current_row = (current_row + 1) % len(passwordMenu)
+        elif key == curses.KEY_ENTER or key in [10, 13]:
+            if current_row == 0:
+                stdscr.clear()
+                stdscr.addstr(1, 0, "Enter Password: ")
+                password = stdscr.getstr().decode('utf-8')
+                break
+            elif current_row == 1:
+                password = passwordGenerator(stdscr)
+                break
+        elif key == 27:  # Escape key
+            break
     
     passwordDb.addPassword(service, username, password)
     
