@@ -1,8 +1,10 @@
+import random
 import sys
 import curses
 import json
 import os
 import hashlib
+import string
 import base64
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -98,11 +100,11 @@ class PasswordDatabase:
         with open(self.jsonFile, 'w') as file:
             json.dump(self.passwords, file)
 
-    def addPassword(self, service, username, password):
+    def addPassword(self, service, username, password, note):
         encryptedPassword = self.encryptionManager.encrypt(password)
         encryptedUsername = self.encryptionManager.encrypt(username)
         encryptedService = self.encryptionManager.encrypt(service)
-        self.passwords[encryptedService] = {'username': encryptedUsername, 'password': encryptedPassword}
+        self.passwords[encryptedService] = {'username': encryptedUsername, 'password': encryptedPassword, 'note': note}
         self.savePasswords()
 
     def retrievePassword(self, service):
@@ -110,7 +112,8 @@ class PasswordDatabase:
             record = self.passwords[service]
             return {
                 'username': self.encryptionManager.decrypt(record['username']),
-                'password': self.encryptionManager.decrypt(record['password'])
+                'password': self.encryptionManager.decrypt(record['password']),
+                'note':     (record['note'])
             }
         return None
     
@@ -123,15 +126,113 @@ class PasswordDatabase:
     
     def getServices(self):
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
+    
+def addNotes(stdscr):
+    menu = ["yes", "no"]
+    current_row = 0
+    
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0,0, "Do you want to add a note to the password?")
+        h, w = stdscr.getmaxyx()
 
-def passwordGenerator(stdscr):
+        for idx, service in enumerate(menu):
+            x = w // 2 - len(service) // 2
+            y = h // 2 - len(menu) // 2 + idx
+            if idx == current_row:
+                stdscr.addstr(y, x, service, curses.A_REVERSE)
+            else:
+                stdscr.addstr(y, x, service)
+
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if key == curses.KEY_UP:
+            current_row = (current_row - 1) % len(menu)
+        elif key == curses.KEY_DOWN:
+            current_row = (current_row + 1) % len(menu)
+        elif key == curses.KEY_ENTER or key in [10, 13]:
+            if current_row == 0:
+                stdscr.clear()
+                stdscr.addstr(0,0,"Note: ")
+                note = stdscr.getstr().decode('utf-8')
+                stdscr.refresh()
+                return note
+            elif current_row == 1:
+                return None      
+        elif key == 27: 
+            break
+
+    return None
+
+def passwordSelector(stdscr):
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "How many characters should your password include? (8-20)")
+        stdscr.refresh()
+
+        try:
+            length = int(stdscr.getstr().decode('utf-8'))
+            if 8 <= length <= 20:
+                break 
+            else:
+                stdscr.addstr(2, 0, "Please enter a number between 8 and 20.")
+        except ValueError:
+            stdscr.addstr(2, 0, "Invalid input. Please enter a number.")
+        
+        stdscr.refresh()
+        stdscr.getch() 
+
     current_row = 0
     stdscr.clear()
-    stdscr.addstr(1,0, "hier wird ein passwort generiert")
+    menu = ["Strong Password", "Medium Password"]
 
-    return 'Sicheres Passwort'
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+
+        for idx, service in enumerate(menu):
+            x = w // 2 - len(service) // 2
+            y = h // 2 - len(menu) // 2 + idx
+            if idx == current_row:
+                stdscr.addstr(y, x, service, curses.A_REVERSE)
+            else:
+                stdscr.addstr(y, x, service)
+
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if key == curses.KEY_UP:
+            current_row = (current_row - 1) % len(menu)
+        elif key == curses.KEY_DOWN:
+            current_row = (current_row + 1) % len(menu)
+        elif key == curses.KEY_ENTER or key in [10, 13]:
+            return passwordGenerator(current_row, length)
+        elif key == 27: 
+            break
+
+    return None
+
+def passwordGenerator(safetyLevel, length):
+    if safetyLevel == 0:
+        caracters = string.ascii_letters + string.digits + string.punctuation
+    
+    elif safetyLevel == 1:
+        caracters = string.ascii_letters + string.digits
+
+    else:
+        return None
+    
+    password = ''.join(random.choice(caracters) for _ in range(length))
+    return password
+    
 
 def showServices(stdscr, passwordDb):
+    """
+    shows the services that are registered
+    """
     services = passwordDb.getServices()
     encrypted_services = list(passwordDb.passwords.keys())
     current_row = 0
@@ -311,6 +412,7 @@ def addPassword(stdscr, passwordDb):
                 if current_row == 0:
                     stdscr.clear()
                     stdscr.addstr(1, 0, "Hier kann die Info gechanged werden, Muss implementiert werden!")
+                    stdscr.refresh()
                     return
                 elif current_row == 1:
                     stdscr.clear()
@@ -321,7 +423,7 @@ def addPassword(stdscr, passwordDb):
     stdscr.addstr(1, 0, "Enter username: ")
     username = stdscr.getstr().decode('utf-8')
     
-    passwordMenu = ["Custom Password", "Generate Safe Password"]
+    passwordMenu = ["Enter Custom Password", "Generate Password"]
     current_row = 0
 
     while True:
@@ -351,14 +453,16 @@ def addPassword(stdscr, passwordDb):
                 password = stdscr.getstr().decode('utf-8')
                 break
             elif current_row == 1:
-                password = passwordGenerator(stdscr)
+                password = passwordSelector(stdscr)
                 break
         elif key == 27:  # Escape key
             break
     
-    passwordDb.addPassword(service, username, password)
+    note = addNotes(stdscr)
     
-    stdscr.addstr(3, 0, "Password added successfully!")
+    passwordDb.addPassword(service, username, password, note)
+    stdscr.clear()
+    stdscr.addstr(2,0, f"The password '{password}' for '{service}' has been added successfully!")
     stdscr.refresh()
     stdscr.getch()
 
@@ -372,6 +476,7 @@ def retrievePassword(stdscr, passwordDb):
         if record:
             stdscr.addstr(1, 0, f"Username: {record['username']}")
             stdscr.addstr(2, 0, f"Password: {record['password']}")
+            stdscr.addstr(3, 0, f"Note:     {record['note']}")
         else:
             stdscr.addstr(0, 0, "No record found.")
             stdscr.addstr(1, 0, service)
