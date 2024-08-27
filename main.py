@@ -172,10 +172,11 @@ def addNotes(stdscr):
 
     return None
 
-def changeInfo(stdscr, service):
-    if PasswordDatabase.isInstance(service):
+def changeInfo(stdscr, passwordDb):
+    encrypted_service = showServices(stdscr, passwordDb)
+    if passwordDb.isInstance(encrypted_service):
        current_row = 0
-       menu = ["Password","Username","Note"]
+       menu = ["Password","Username","Note","Cancel"]
 
        while True:
         stdscr.clear()
@@ -200,24 +201,69 @@ def changeInfo(stdscr, service):
             current_row = (current_row + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
             if current_row == 0:
-                changePassword(stdscr)
+                changePassword(stdscr, passwordDb, encrypted_service)
+                break
             elif current_row == 1:
-                changeUsername(stdscr)
+                changeUsername(stdscr,passwordDb, encrypted_service)
+                break
             elif current_row == 2:
-                changeNote(stdscr)
+                changeNote(stdscr,passwordDb, encrypted_service)
+                break
+            elif current_row == 3:
+                break
         elif key == 27: 
             break
 
     return None
 
-def changePassword(stdscr):
-    password = ja
+def changePassword(stdscr, passwordDb, service):
+    curses.echo()
+    stdscr.clear()
+    stdscr.addstr(0, 0, "Enter new password: ")
+    new_password = stdscr.getstr().decode('utf-8')
 
-def changeUsername(stdscr):
-    username = ja
+    if passwordDb.isInstance(service):
+        record = passwordDb.retrievePassword(service)
+        passwordDb.addPassword(service, record['username'], new_password, record['note'])
+        stdscr.addstr(1, 0, "Password updated successfully.")
+    else:
+        stdscr.addstr(1, 0, "Service not found.")
 
-def changeNote(stdscr):
-    note = ja
+    stdscr.refresh()
+    stdscr.getch()
+
+def changeUsername(stdscr, passwordDb, service):
+    curses.echo()
+    stdscr.clear()
+    stdscr.addstr(0, 0, "Enter new username: ")
+    new_username = stdscr.getstr().decode('utf-8')
+
+    if passwordDb.isInstance(service):
+        record = passwordDb.retrievePassword(service)
+        passwordDb.addPassword(service, new_username, record['password'], record['note'])
+        stdscr.addstr(1, 0, "Username updated successfully.")
+    else:
+        stdscr.addstr(1, 0, "Service not found.")
+
+    stdscr.refresh()
+    stdscr.getch()
+
+def changeNote(stdscr, passwordDb, service):
+    curses.echo()
+    stdscr.clear()
+    stdscr.addstr(0, 0, "Enter new note: ")
+    new_note = stdscr.getstr().decode('utf-8')
+
+    if passwordDb.isInstance(service):
+        record = passwordDb.retrievePassword(service)
+        passwordDb.addPassword(service, record['username'], record['password'], new_note)
+        stdscr.addstr(1, 0, "Note updated successfully.")
+    else:
+        stdscr.addstr(1, 0, "Service not found.")
+
+    stdscr.refresh()
+    stdscr.getch()
+
 
 def passwordSelector(stdscr):
     while True:
@@ -411,6 +457,8 @@ def mainMenu(stdscr, userName, passwordDb):
         stdscr.refresh()
 
         key = stdscr.getch()
+
+        services = passwordDb.getServices()
 
         if key == curses.KEY_UP:
             current_row = (current_row - 1) % len(menu)
