@@ -124,6 +124,12 @@ class PasswordDatabase:
             return True
         return False
     
+    def isInstance(self, service):
+        if service in self.passwords:
+            return True
+        else:
+            return False
+    
     def getServices(self):
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
     
@@ -165,6 +171,53 @@ def addNotes(stdscr):
             break
 
     return None
+
+def changeInfo(stdscr, service):
+    if PasswordDatabase.isInstance(service):
+       current_row = 0
+       menu = ["Password","Username","Note"]
+
+       while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "Which part do you want to change?")
+        h, w = stdscr.getmaxyx()
+
+        for idx, service in enumerate(menu):
+            x = w // 2 - len(service) // 2
+            y = h // 2 - len(menu) // 2 + idx
+            if idx == current_row:
+                stdscr.addstr(y, x, service, curses.A_REVERSE)
+            else:
+                stdscr.addstr(y, x, service)
+
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if key == curses.KEY_UP:
+            current_row = (current_row - 1) % len(menu)
+        elif key == curses.KEY_DOWN:
+            current_row = (current_row + 1) % len(menu)
+        elif key == curses.KEY_ENTER or key in [10, 13]:
+            if current_row == 0:
+                changePassword(stdscr)
+            elif current_row == 1:
+                changeUsername(stdscr)
+            elif current_row == 2:
+                changeNote(stdscr)
+        elif key == 27: 
+            break
+
+    return None
+
+def changePassword(stdscr):
+    password = ja
+
+def changeUsername(stdscr):
+    username = ja
+
+def changeNote(stdscr):
+    note = ja
 
 def passwordSelector(stdscr):
     while True:
@@ -340,7 +393,7 @@ def createUserScreen(stdscr, userManager):
 
 
 def mainMenu(stdscr, userName, passwordDb):
-    menu = ['1. Add Password', '2. Retrieve Password', '3. Delete Password', '4. Logout']
+    menu = ['Add Password', 'Retrieve Password', 'Delete Password', 'Change Info', 'Logout']
     current_row = 0
 
     while True:
@@ -371,6 +424,8 @@ def mainMenu(stdscr, userName, passwordDb):
             elif current_row == 2:
                 deletePassword(stdscr, passwordDb)
             elif current_row == 3:
+                changeInfo(stdscr, passwordDb)
+            elif current_row == 4:
                 break
         elif key == 27:  # Escape key
             break
