@@ -230,20 +230,87 @@ def addNotes(stdscr):
                 stdscr.refresh()
                 return note
             elif current_row == 1:
-                return None      
+                return ""      
         elif key == 27: 
             break
 
     return None
 
 def customPassword(stdscr):
+    curses.start_color()
+    curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+    passwordSafe = True
 
     while True:
         stdscr.clear()
         stdscr.addstr(0, 0, "Enter you´r desired password: ")
         password = stdscr.getstr().decode('utf-8')
 
-        if len(password) < 8 and len(password) > 20:
+        if passwordSafe:
+            if len(password) < 8 or len(password) > 30:
+                stdscr.addstr(2, 0, "A safe password should be between 8 and 20 Characters!", curses.color_pair(2))
+                passwordSafe = False
+            
+            if not re.search(r"[A-Z]", password):
+                stdscr.addstr(3, 0, "The password should contain at least one uppercase letter!", curses.color_pair(2))
+                passwordSafe = False
+                
+            if not re.search(r"[a-z]", password):
+                stdscr.addstr(4, 0, "The password should contain at least one lowercase letter!", curses.color_pair(2))
+                passwordSafe = False
+               
+            if not re.search(r"[0-9]", password):
+                stdscr.addstr(5, 0, "The password should contain at least one number!", curses.color_pair(2))
+                passwordSafe = False
+                
+            if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+                stdscr.addstr(6, 0, "The password should contain at least one special letter!", curses.color_pair(2))
+                passwordSafe = False
+            stdscr.getch()
+
+        if not passwordSafe:
+            current_row = 0
+            menu = ['Yes', 'No']
+            while True:
+                stdscr.clear()
+                stdscr.addstr(0, 0, "Your password is not safe, do you want to edit it with the Guidelines?")
+                h, w = stdscr.getmaxyx()
+
+                for idx, service in enumerate(menu):
+                    x = w // 2 - len(service) // 2
+                    y = h // 2 - len(menu) // 2 + idx
+                    if idx == current_row:
+                        stdscr.addstr(y, x, service, curses.A_REVERSE)
+                    else:
+                        stdscr.addstr(y, x, service)
+
+                stdscr.refresh()
+
+                key = stdscr.getch()
+
+                if key == curses.KEY_UP:
+                    current_row = (current_row - 1) % len(menu)
+                elif key == curses.KEY_DOWN:
+                    current_row = (current_row + 1) % len(menu)
+                elif key == curses.KEY_ENTER or key in [10, 13]:
+                    if current_row == 0:
+                        password = safePassword(stdscr, password)
+                        break
+                    elif current_row == 1:
+                        break
+                elif key == 27: 
+                    break
+        
+        stdscr.clear()
+        return password
+
+def safePassword(stdscr, password):
+
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "Enter you´r desired password: ")
+        password = stdscr.getstr().decode('utf-8')
+        if len(password) < 8 or len(password) > 30:
             stdscr.addstr(2, 0, "The password has to be between 8 and 20 caracters! Try again")
             stdscr.getch()
             continue
@@ -263,15 +330,17 @@ def customPassword(stdscr):
             stdscr.addstr(2, 0, "The password has to contain at least one special letter! Try again")
             stdscr.getch()
             continue
-        
-        curses.start_color()
-        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Green text on black background
-        stdscr.clear()
-        stdscr.addstr(2, 0, "Password added successfully!", curses.color_pair(1))
-        stdscr.getch()
-        stdscr.clear()
-        return password
 
+        break
+
+    curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Green text on black background
+    stdscr.clear()
+    stdscr.addstr(2, 0, "Your password is Safe!", curses.color_pair(1))
+    stdscr.getch()
+
+    return password
+
+    
 
 def getTime():
     """
@@ -335,8 +404,7 @@ def changePassword(stdscr, passwordDb, service):
     """
     curses.echo()
     stdscr.clear()
-    stdscr.addstr(0, 0, "Enter new password: ")
-    newPassword = stdscr.getstr().decode('utf-8')
+    newPassword = customPassword(stdscr)
     decryptedService = passwordDb.decryptService(service)
     time = getTime()
 
@@ -403,12 +471,12 @@ def passwordSelector(stdscr):
     """
     while True:
         stdscr.clear()
-        stdscr.addstr(0, 0, "How many characters should your password include? (8-20)")
+        stdscr.addstr(0, 0, "How many characters should your password include? (8-30)")
         stdscr.refresh()
 
         try:
             length = int(stdscr.getstr().decode('utf-8'))
-            if 8 <= length <= 20:
+            if 8 <= length <= 30:
                 break 
             else:
                 stdscr.addstr(2, 0, "Please enter a number between 8 and 20.")
@@ -570,8 +638,8 @@ def createUserScreen(stdscr, userManager):
     Create user screen
     """
     curses.echo()
-    stdscr.clear()
     while True:
+        stdscr.clear()
         stdscr.addstr(0, 0, "Enter your desired username: ")
         username = stdscr.getstr().decode('utf-8')
         if len(username) < 1 :
@@ -580,7 +648,7 @@ def createUserScreen(stdscr, userManager):
             stdscr.getch()
             continue
 
-        password = customPassword
+        password = customPassword(stdscr)
         break
 
     if userManager.createUser(username, password):
@@ -640,9 +708,16 @@ def addPassword(stdscr, passwordDb):
     """
     curses.echo()
     
-    stdscr.clear()
-    stdscr.addstr(0, 0, "Enter service/website name: ")
-    service = stdscr.getstr().decode('utf-8')
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "Enter service/website: ")
+        service = stdscr.getstr().decode('utf-8')
+        if len(service) < 1 :
+            stdscr.clear()
+            stdscr.addstr(0,0, "Your service has to have at least one letter! Try again")
+            stdscr.getch()
+            continue
+        break
 
     services = passwordDb.getServices() 
     if service in services:
@@ -679,8 +754,15 @@ def addPassword(stdscr, passwordDb):
             elif key == 27:  # Escape key
                 break
  
-    stdscr.addstr(1, 0, "Enter username: ")
-    username = stdscr.getstr().decode('utf-8')
+    while True:
+        stdscr.addstr(0, 0, "Enter your desired username: ")
+        username = stdscr.getstr().decode('utf-8')
+        if len(username) < 1 :
+            stdscr.clear()
+            stdscr.addstr(0,0, "Your username has to have at least one letter! Try again")
+            stdscr.getch()
+            continue
+        break
     
     passwordMenu = ["Enter Custom Password", "Generate Password"]
     current_row = 0
