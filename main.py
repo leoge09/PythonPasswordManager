@@ -266,6 +266,9 @@ def customPassword(stdscr):
             if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
                 stdscr.addstr(6, 0, "The password should contain at least one special letter!", curses.color_pair(2))
                 passwordSafe = False
+            
+            if passwordSafe:
+                stdscr.addstr(3, 0, "Your password is safe and has been added successfully!")
             stdscr.getch()
 
         if not passwordSafe:
