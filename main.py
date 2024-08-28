@@ -1,4 +1,5 @@
 import random
+import re
 import sys
 import curses
 import json
@@ -6,12 +7,16 @@ import os
 import hashlib
 import string
 import base64
-from datetime import datetime, timezone
+import getpass
+from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 
 class EncryptionManager:
+    """
+    Manages the encryption and decryption of all the data that needs to be encoded
+    """
     def __init__(self, key_or_password):
         if isinstance(key_or_password, str):
             self.key = hashlib.sha256(key_or_password.encode()).digest()
@@ -22,6 +27,9 @@ class EncryptionManager:
         self.backend = default_backend()
 
     def encrypt(self, plainText):
+        """
+        Encryption with AES algorithm
+        """
         iv = os.urandom(16)
         cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv), backend=self.backend)
         encryptor = cipher.encryptor()
@@ -33,6 +41,9 @@ class EncryptionManager:
         return base64.b64encode(iv + cipherText).decode('utf-8')
 
     def decrypt(self, cipherText):
+        """
+        Decryption
+        """
         rawData = base64.b64decode(cipherText)
         iv = rawData[:16]
         cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv), backend=self.backend)
@@ -46,6 +57,9 @@ class EncryptionManager:
 
 
 class UserManager:
+    """
+    Manages most of the functions for the creation and reaching of the Users
+    """
     def __init__(self, jsonFile):
         self.jsonFile = jsonFile
         if not os.path.exists(jsonFile):
@@ -54,14 +68,23 @@ class UserManager:
         self.users = self.loadUsers()
     
     def loadUsers(self):
+        """
+        Loading Users from Json file
+        """
         with open(self.jsonFile, 'r') as file:
             return json.load(file)
     
     def saveUsers(self):
+        """
+        Saving Users in Json file
+        """
         with open(self.jsonFile, 'w') as file:
             json.dump(self.users, file)
     
     def createUser(self, username, password):
+        """
+        Manages the creation of a new user
+        """
         if username in self.users:
             return False
         
@@ -73,6 +96,9 @@ class UserManager:
         return True
     
     def authenticate(self, username, password):
+        """
+        checks if the user is registered
+        """
         if username not in self.users:
             return False
         
@@ -81,9 +107,15 @@ class UserManager:
         return encryptionManager.key == storedHash
     
     def getUserPassword(self, username):
+        """
+        gets the Masterpassword of the current user
+        """
         return base64.b64decode(self.users[username]['masterPassword']) if username in self.users else None
     
 class PasswordDatabase:
+    """
+    Mangages the passwords in the actual passwordmanager
+    """
     def __init__(self, jsonFile, encryptionManager):
         self.jsonFile = jsonFile
         self.encryptionManager = encryptionManager
@@ -93,14 +125,23 @@ class PasswordDatabase:
         self.passwords = self.loadPasswords()
 
     def loadPasswords(self):
+        """
+        Load the Json file for the current User
+        """
         with open(self.jsonFile, 'r') as file:
             return json.load(file)
 
     def savePasswords(self):
+        """
+        Save the Json file for the current User
+        """
         with open(self.jsonFile, 'w') as file:
             json.dump(self.passwords, file)
 
     def addPassword(self, service, username, password, note, timeNow):
+        """
+        Encrypts the Data for saving
+        """
         encryptedPassword = self.encryptionManager.encrypt(password)
         encryptedUsername = self.encryptionManager.encrypt(username)
         encryptedService = self.encryptionManager.encrypt(service)
@@ -109,6 +150,9 @@ class PasswordDatabase:
         self.savePasswords()
 
     def retrievePassword(self, service):
+        """
+        Decrypts and returns the data for retrieving the password, username, note and time
+        """
         if service in self.passwords:
             record = self.passwords[service]
             return {
@@ -120,6 +164,9 @@ class PasswordDatabase:
         return None
     
     def deletePassword(self, service):
+        """
+        Delete a password
+        """
         if service in self.passwords:
             del self.passwords[service]
             self.savePasswords()
@@ -127,18 +174,30 @@ class PasswordDatabase:
         return False
     
     def isInstance(self, service):
+        """
+        Checks if the service is already registered
+        """
         if service in self.passwords:
             return True
         else:
             return False
     
     def getServices(self):
+        """
+        Returns all services in decrypted form
+        """
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
     
     def decryptService(self, service):
+        """
+        Returns one decrypted service
+        """
         return self.encryptionManager.decrypt(service)
     
 def addNotes(stdscr):
+    """
+    Adding notes to the password
+    """
     menu = ["yes", "no"]
     current_row = 0
     
@@ -177,14 +236,56 @@ def addNotes(stdscr):
 
     return None
 
+def customPassword(stdscr):
+
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "Enter you´r desired password: ")
+        password = stdscr.getstr().decode('utf-8')
+
+        if len(password) < 8 and len(password) > 20:
+            stdscr.addstr(2, 0, "The password has to be between 8 and 20 caracters! Try again")
+            stdscr.getch()
+            continue
+        if not re.search(r"[A-Z]", password):
+            stdscr.addstr(2, 0, "The password has to contain at least one uppercase letter! Try again")
+            stdscr.getch()
+            continue
+        if not re.search(r"[a-z]", password):
+            stdscr.addstr(2, 0, "The password has to contain at least one lowercase letter! Try again")
+            stdscr.getch()
+            continue
+        if not re.search(r"[0-9]", password):
+            stdscr.addstr(2, 0, "The password has to contain at least one number! Try again")
+            stdscr.getch()
+            continue
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            stdscr.addstr(2, 0, "The password has to contain at least one special letter! Try again")
+            stdscr.getch()
+            continue
+        
+        curses.start_color()
+        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Green text on black background
+        stdscr.clear()
+        stdscr.addstr(2, 0, "Password added successfully!", curses.color_pair(1))
+        stdscr.getch()
+        stdscr.clear()
+        return password
+
+
 def getTime():
-    
-    time = datetime.now().astimezone()
+    """
+    Returnign time as String
+    """
+    time = datetime.now()
     timeString = time.strftime("%Y-%m-%d %H:%M:%S")
 
     return timeString
 
 def changeInfo(stdscr, passwordDb):
+    """
+    Handles the modification of information and forwards to the appropriate function. 
+    """
     encrypted_service = showServices(stdscr, passwordDb)
     if passwordDb.isInstance(encrypted_service):
        current_row = 0
@@ -229,6 +330,9 @@ def changeInfo(stdscr, passwordDb):
     return None
 
 def changePassword(stdscr, passwordDb, service):
+    """
+    Changing the password
+    """
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new password: ")
@@ -249,6 +353,9 @@ def changePassword(stdscr, passwordDb, service):
     stdscr.getch()
 
 def changeUsername(stdscr, passwordDb, service):
+    """
+    Changes the Username
+    """
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new username: ")
@@ -268,6 +375,9 @@ def changeUsername(stdscr, passwordDb, service):
     stdscr.getch()
 
 def changeNote(stdscr, passwordDb, service):
+    """
+    Changes the note
+    """
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new note: ")
@@ -288,6 +398,9 @@ def changeNote(stdscr, passwordDb, service):
 
 
 def passwordSelector(stdscr):
+    """
+    Handles the basics of automatic password creation
+    """
     while True:
         stdscr.clear()
         stdscr.addstr(0, 0, "How many characters should your password include? (8-20)")
@@ -337,6 +450,9 @@ def passwordSelector(stdscr):
     return None
 
 def passwordGenerator(safetyLevel, length):
+    """
+    Generates the automatic password
+    """
     if safetyLevel == 0:
         caracters = string.ascii_letters + string.digits + string.punctuation
     
@@ -394,6 +510,9 @@ def showServices(stdscr, passwordDb):
 
 
 def startScreen(stdscr):
+    """
+    Starting screen
+    """
     menu = ["1. Login", "2. Create a new user", "3. Exit"]
     current_row = 0
 
@@ -426,6 +545,9 @@ def startScreen(stdscr):
 
 
 def loginScreen(stdscr, userManager):
+    """
+    Login screen
+    """
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter your username: ")
@@ -444,13 +566,22 @@ def loginScreen(stdscr, userManager):
 
 
 def createUserScreen(stdscr, userManager):
+    """
+    Create user screen
+    """
     curses.echo()
     stdscr.clear()
-    stdscr.addstr(0, 0, "Enter your desired username: ")
-    username = stdscr.getstr().decode('utf-8')
+    while True:
+        stdscr.addstr(0, 0, "Enter your desired username: ")
+        username = stdscr.getstr().decode('utf-8')
+        if len(username) < 1 :
+            stdscr.clear()
+            stdscr.addstr(0,0, "Your username has to have at least one letter! Try again")
+            stdscr.getch()
+            continue
 
-    stdscr.addstr(1, 0, "Enter your desired password: ")
-    password = stdscr.getstr().decode('utf-8')
+        password = customPassword
+        break
 
     if userManager.createUser(username, password):
         stdscr.addstr(3, 0, "User created successfully! Press any key to login.")
@@ -462,6 +593,9 @@ def createUserScreen(stdscr, userManager):
 
 
 def mainMenu(stdscr, userName, passwordDb):
+    """
+    Main menu screen
+    """
     menu = ['Add Password', 'Retrieve Password', 'Delete Password', 'Change Info', 'Logout']
     current_row = 0
 
@@ -480,8 +614,6 @@ def mainMenu(stdscr, userName, passwordDb):
         stdscr.refresh()
 
         key = stdscr.getch()
-
-        services = passwordDb.getServices()
 
         if key == curses.KEY_UP:
             current_row = (current_row - 1) % len(menu)
@@ -503,6 +635,9 @@ def mainMenu(stdscr, userName, passwordDb):
 
 
 def addPassword(stdscr, passwordDb):
+    """
+    Handles the creation of a new password
+    """
     curses.echo()
     
     stdscr.clear()
@@ -572,9 +707,7 @@ def addPassword(stdscr, passwordDb):
             current_row = (current_row + 1) % len(passwordMenu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
             if current_row == 0:
-                stdscr.clear()
-                stdscr.addstr(1, 0, "Enter Password: ")
-                password = stdscr.getstr().decode('utf-8')
+                password = customPassword(stdscr)
                 break
             elif current_row == 1:
                 password = passwordSelector(stdscr)
@@ -594,6 +727,9 @@ def addPassword(stdscr, passwordDb):
 
 
 def retrievePassword(stdscr, passwordDb):
+    """
+    Retrieving the password
+    """
     service = showServices(stdscr, passwordDb)
 
     if service:
@@ -612,6 +748,8 @@ def retrievePassword(stdscr, passwordDb):
 
 
 def deletePassword(stdscr, passwordDb):
+    """
+    Deleting a password"""
     service = showServices(stdscr, passwordDb)
 
     if service:
@@ -626,6 +764,9 @@ def deletePassword(stdscr, passwordDb):
 
 
 def main(stdscr):
+    """
+    Main function
+    """
     userManager = UserManager('users.json')
     while True:
         option = startScreen(stdscr)
