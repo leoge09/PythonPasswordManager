@@ -6,10 +6,10 @@ import os
 import hashlib
 import string
 import base64
+from datetime import datetime, timezone
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
-
 
 class EncryptionManager:
     def __init__(self, key_or_password):
@@ -100,11 +100,12 @@ class PasswordDatabase:
         with open(self.jsonFile, 'w') as file:
             json.dump(self.passwords, file)
 
-    def addPassword(self, service, username, password, note):
+    def addPassword(self, service, username, password, note, timeNow):
         encryptedPassword = self.encryptionManager.encrypt(password)
         encryptedUsername = self.encryptionManager.encrypt(username)
         encryptedService = self.encryptionManager.encrypt(service)
-        self.passwords[encryptedService] = {'username': encryptedUsername, 'password': encryptedPassword, 'note': note}
+        encryptedTime = self.encryptionManager.encrypt(timeNow)
+        self.passwords[encryptedService] = {'username': encryptedUsername, 'password': encryptedPassword, 'note': note, 'time': encryptedTime}
         self.savePasswords()
 
     def retrievePassword(self, service):
@@ -113,7 +114,8 @@ class PasswordDatabase:
             return {
                 'username': self.encryptionManager.decrypt(record['username']),
                 'password': self.encryptionManager.decrypt(record['password']),
-                'note':     (record['note'])
+                'note':     (record['note']),
+                'time':     self.encryptionManager.decrypt(record['time'])
             }
         return None
     
@@ -132,6 +134,9 @@ class PasswordDatabase:
     
     def getServices(self):
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
+    
+    def decryptService(self, service):
+        return self.encryptionManager.decrypt(service)
     
 def addNotes(stdscr):
     menu = ["yes", "no"]
@@ -172,6 +177,13 @@ def addNotes(stdscr):
 
     return None
 
+def getTime():
+    
+    time = datetime.now().astimezone()
+    timeString = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    return timeString
+
 def changeInfo(stdscr, passwordDb):
     encrypted_service = showServices(stdscr, passwordDb)
     if passwordDb.isInstance(encrypted_service):
@@ -204,10 +216,10 @@ def changeInfo(stdscr, passwordDb):
                 changePassword(stdscr, passwordDb, encrypted_service)
                 break
             elif current_row == 1:
-                changeUsername(stdscr,passwordDb, encrypted_service)
+                changeUsername(stdscr, passwordDb, encrypted_service)
                 break
             elif current_row == 2:
-                changeNote(stdscr,passwordDb, encrypted_service)
+                changeNote(stdscr, passwordDb, encrypted_service)
                 break
             elif current_row == 3:
                 break
@@ -220,11 +232,15 @@ def changePassword(stdscr, passwordDb, service):
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new password: ")
-    new_password = stdscr.getstr().decode('utf-8')
+    newPassword = stdscr.getstr().decode('utf-8')
+    decryptedService = passwordDb.decryptService(service)
+    time = getTime()
+
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(service, record['username'], new_password, record['note'])
+        passwordDb.addPassword(decryptedService, record['username'], newPassword, record['note'], time)
+        passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Password updated successfully.")
     else:
         stdscr.addstr(1, 0, "Service not found.")
@@ -237,10 +253,13 @@ def changeUsername(stdscr, passwordDb, service):
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new username: ")
     new_username = stdscr.getstr().decode('utf-8')
+    decryptedService = passwordDb.decryptService(service)
+    time = getTime()
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(service, new_username, record['password'], record['note'])
+        passwordDb.addPassword(decryptedService, new_username, record['password'], record['note'], time)
+        passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Username updated successfully.")
     else:
         stdscr.addstr(1, 0, "Service not found.")
@@ -253,10 +272,13 @@ def changeNote(stdscr, passwordDb, service):
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new note: ")
     new_note = stdscr.getstr().decode('utf-8')
+    decryptedService = passwordDb.decryptService(service)
+    time = getTime()
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(service, record['username'], record['password'], new_note)
+        passwordDb.addPassword(decryptedService, record['username'], record['password'], new_note, time)
+        passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Note updated successfully.")
     else:
         stdscr.addstr(1, 0, "Service not found.")
@@ -340,6 +362,7 @@ def showServices(stdscr, passwordDb):
         stdscr.clear()
         stdscr.addstr(0,0, "No passwords registered! Add one and try again.")
         stdscr.refresh()
+        stdscr.getch()
         return None
 
     while True:
@@ -513,9 +536,7 @@ def addPassword(stdscr, passwordDb):
                 current_row = (current_row + 1) % len(menu)
             elif key == curses.KEY_ENTER or key in [10, 13]:
                 if current_row == 0:
-                    stdscr.clear()
-                    stdscr.addstr(1, 0, "Hier kann die Info gechanged werden, Muss implementiert werden!")
-                    stdscr.refresh()
+                    changeInfo(stdscr, passwordDb)
                     return
                 elif current_row == 1:
                     stdscr.clear()
@@ -562,8 +583,10 @@ def addPassword(stdscr, passwordDb):
             break
     
     note = addNotes(stdscr)
+
+    timeNow = getTime()
     
-    passwordDb.addPassword(service, username, password, note)
+    passwordDb.addPassword(service, username, password, note, timeNow)
     stdscr.clear()
     stdscr.addstr(2,0, f"The password '{password}' for '{service}' has been added successfully!")
     stdscr.refresh()
@@ -580,6 +603,7 @@ def retrievePassword(stdscr, passwordDb):
             stdscr.addstr(1, 0, f"Username: {record['username']}")
             stdscr.addstr(2, 0, f"Password: {record['password']}")
             stdscr.addstr(3, 0, f"Note:     {record['note']}")
+            stdscr.addstr(5, 0, f"Creation/changing date: {record['time']}")
         else:
             stdscr.addstr(0, 0, "No record found.")
             stdscr.addstr(1, 0, service)
