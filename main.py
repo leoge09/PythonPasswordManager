@@ -1,14 +1,14 @@
+""" Used modules """
 import random
 import re
-import sys
 import curses
 import json
 import os
 import hashlib
 import string
 import base64
-import getpass
 from datetime import datetime
+import requests
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -17,11 +17,11 @@ class EncryptionManager:
     """
     Manages the encryption and decryption of all the data that needs to be encoded
     """
-    def __init__(self, key_or_password):
-        if isinstance(key_or_password, str):
-            self.key = hashlib.sha256(key_or_password.encode()).digest()
-        elif isinstance(key_or_password, bytes):
-            self.key = key_or_password
+    def __init__(self, keyOrPassword):
+        if isinstance(keyOrPassword, str):
+            self.key = hashlib.sha256(keyOrPassword.encode()).digest()
+        elif isinstance(keyOrPassword, bytes):
+            self.key = keyOrPassword
         else:
             raise ValueError("Key or password must be a string or bytes object.")
         self.backend = default_backend()
@@ -63,55 +63,55 @@ class UserManager:
     def __init__(self, jsonFile):
         self.jsonFile = jsonFile
         if not os.path.exists(jsonFile):
-            with open(jsonFile, 'w') as file:
+            with open(jsonFile, 'w', encoding="utf-8") as file:
                 json.dump({}, file)
         self.users = self.loadUsers()
-    
+
     def loadUsers(self):
         """
         Loading Users from Json file
         """
-        with open(self.jsonFile, 'r') as file:
+        with open(self.jsonFile, 'r', encoding="utf-8") as file:
             return json.load(file)
-    
+
     def saveUsers(self):
         """
         Saving Users in Json file
         """
-        with open(self.jsonFile, 'w') as file:
+        with open(self.jsonFile, 'w', encoding="utf-8") as file:
             json.dump(self.users, file)
-    
+
     def createUser(self, username, password):
         """
         Manages the creation of a new user
         """
         if username in self.users:
             return False
-        
+
         encryptionManager = EncryptionManager(password)
         masterPassword = encryptionManager.key
-        
+
         self.users[username] = {'masterPassword': base64.b64encode(masterPassword).decode('utf-8')}
         self.saveUsers()
         return True
-    
+
     def authenticate(self, username, password):
         """
         checks if the user is registered
         """
         if username not in self.users:
             return False
-        
+
         storedHash = base64.b64decode(self.users[username]['masterPassword'])
         encryptionManager = EncryptionManager(password)
         return encryptionManager.key == storedHash
-    
+
     def getUserPassword(self, username):
         """
         gets the Masterpassword of the current user
         """
         return base64.b64decode(self.users[username]['masterPassword']) if username in self.users else None
-    
+
 class PasswordDatabase:
     """
     Mangages the passwords in the actual passwordmanager
@@ -120,7 +120,7 @@ class PasswordDatabase:
         self.jsonFile = jsonFile
         self.encryptionManager = encryptionManager
         if not os.path.exists(jsonFile):
-            with open(jsonFile, 'w') as file:
+            with open(jsonFile, 'w', encoding="utf-8") as file:
                 json.dump({}, file)
         self.passwords = self.loadPasswords()
 
@@ -128,20 +128,21 @@ class PasswordDatabase:
         """
         Load the Json file for the current User
         """
-        with open(self.jsonFile, 'r') as file:
+        with open(self.jsonFile, 'r', encoding="utf-8") as file:
             return json.load(file)
 
     def savePasswords(self):
         """
         Save the Json file for the current User
         """
-        with open(self.jsonFile, 'w') as file:
+        with open(self.jsonFile, 'w', encoding="utf-8") as file:
             json.dump(self.passwords, file)
 
-    def addPassword(self, service, username, password, note, timeNow):
+    def addPassword(self, service, username, password, note):
         """
         Encrypts the Data for saving
         """
+        timeNow = getTime()
         encryptedPassword = self.encryptionManager.encrypt(password)
         encryptedUsername = self.encryptionManager.encrypt(username)
         encryptedService = self.encryptionManager.encrypt(service)
@@ -162,7 +163,7 @@ class PasswordDatabase:
                 'time':     self.encryptionManager.decrypt(record['time'])
             }
         return None
-    
+
     def deletePassword(self, service):
         """
         Delete a password
@@ -172,35 +173,32 @@ class PasswordDatabase:
             self.savePasswords()
             return True
         return False
-    
+
     def isInstance(self, service):
         """
         Checks if the service is already registered
         """
-        if service in self.passwords:
-            return True
-        else:
-            return False
-    
+        return service in self.passwords
+
     def getServices(self):
         """
         Returns all services in decrypted form
         """
         return [self.encryptionManager.decrypt(service) for service in self.passwords]
-    
+
     def decryptService(self, service):
         """
         Returns one decrypted service
         """
         return self.encryptionManager.decrypt(service)
-    
+
 def addNotes(stdscr):
     """
     Adding notes to the password
     """
     menu = ["yes", "no"]
-    current_row = 0
-    
+    currentRow = 0
+
     while True:
         stdscr.clear()
         stdscr.addstr(0,0, "Do you want to add a note to the password?")
@@ -209,7 +207,7 @@ def addNotes(stdscr):
         for idx, service in enumerate(menu):
             x = w // 2 - len(service) // 2
             y = h // 2 - len(menu) // 2 + idx
-            if idx == current_row:
+            if idx == currentRow:
                 stdscr.addstr(y, x, service, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, service)
@@ -219,24 +217,95 @@ def addNotes(stdscr):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(menu)
+            currentRow = (currentRow - 1) % len(menu)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(menu)
+            currentRow = (currentRow + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            if current_row == 0:
+            if currentRow == 0:
                 stdscr.clear()
-                stdscr.addstr(0,0,"Note: ")
+                stdscr.addstr(0, 0,"Note: ")
                 note = stdscr.getstr().decode('utf-8')
                 stdscr.refresh()
                 return note
-            elif current_row == 1:
-                return ""      
-        elif key == 27: 
+            if currentRow == 1:
+                return ""
+        elif key == 27:
             break
 
     return None
 
+def pwChecker(stdscr, password):
+    """
+    checks if the password is safe
+    """
+    passwordSafe = True
+    if len(password) < 8 or len(password) > 30:
+        stdscr.addstr(2, 0, "A safe password should be between 8 and 20 Characters!", curses.color_pair(2))
+        passwordSafe = False
+
+    if not re.search(r"[A-Z]", password):
+        stdscr.addstr(3, 0, "The password should contain at least one uppercase letter!", curses.color_pair(2))
+        passwordSafe = False
+
+    if not re.search(r"[a-z]", password):
+        stdscr.addstr(4, 0, "The password should contain at least one lowercase letter!", curses.color_pair(2))
+        passwordSafe = False
+
+    if not re.search(r"[0-9]", password):
+        stdscr.addstr(5, 0, "The password should contain at least one number!", curses.color_pair(2))
+        passwordSafe = False
+
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        stdscr.addstr(6, 0, "The password should contain at least one special letter!", curses.color_pair(2))
+        passwordSafe = False
+
+    if checkPawndedApi(stdscr, password):
+        stdscr.addstr(7, 0, "Your password has been leaked!", curses.color_pair(2))
+        passwordSafe = False
+
+    if passwordSafe:
+        stdscr.addstr(3, 0, "Your password is safe and has been added successfully!")
+    stdscr.getch()
+
+    return passwordSafe
+
+def checkPawndedApi(stdscr, password, timeout=5):
+    """
+    Checks if password was pawned.
+    The `timeout` parameter specifies the maximum time (in seconds) to wait for a response.
+    """
+    hashPassword = hashlib.sha1(password.encode('utf-8')).hexdigest().upper()
+    firstChars, rest = hashPassword[:5], hashPassword[5:]
+
+    url = f"https://api.pwnedpasswords.com/range/{firstChars}"
+
+    try:
+        response = requests.get(url, timeout=timeout)
+        if response.status_code == 200:
+            hashes = response.text.splitlines()
+            for h in hashes:
+                if rest in h:
+                    return True
+        elif response.status_code == 404:
+            return False
+        else:
+            stdscr.addstr(8, 0, f"Error accessing data from 'have I been pawned' (status code: {response.status_code})")
+            return False
+
+    except requests.exceptions.Timeout:
+        stdscr.addstr(8, 0, "The request to 'have I been pawned API' timed out.")
+        return False
+
+    except requests.exceptions.RequestException:
+        stdscr.addstr(8, 0, "Error connecting to 'have I been pawned API'")
+        return False
+
+    return False
+
 def customPassword(stdscr):
+    """
+    Manages the safety of a custom password
+    """
     curses.start_color()
     curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
     passwordSafe = True
@@ -247,32 +316,10 @@ def customPassword(stdscr):
         password = stdscr.getstr().decode('utf-8')
 
         if passwordSafe:
-            if len(password) < 8 or len(password) > 30:
-                stdscr.addstr(2, 0, "A safe password should be between 8 and 20 Characters!", curses.color_pair(2))
-                passwordSafe = False
-            
-            if not re.search(r"[A-Z]", password):
-                stdscr.addstr(3, 0, "The password should contain at least one uppercase letter!", curses.color_pair(2))
-                passwordSafe = False
-                
-            if not re.search(r"[a-z]", password):
-                stdscr.addstr(4, 0, "The password should contain at least one lowercase letter!", curses.color_pair(2))
-                passwordSafe = False
-               
-            if not re.search(r"[0-9]", password):
-                stdscr.addstr(5, 0, "The password should contain at least one number!", curses.color_pair(2))
-                passwordSafe = False
-                
-            if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-                stdscr.addstr(6, 0, "The password should contain at least one special letter!", curses.color_pair(2))
-                passwordSafe = False
-            
-            if passwordSafe:
-                stdscr.addstr(3, 0, "Your password is safe and has been added successfully!")
-            stdscr.getch()
+            passwordSafe = pwChecker(stdscr, password)
 
         if not passwordSafe:
-            current_row = 0
+            currentRow = 0
             menu = ['Yes', 'No']
             while True:
                 stdscr.clear()
@@ -282,7 +329,7 @@ def customPassword(stdscr):
                 for idx, service in enumerate(menu):
                     x = w // 2 - len(service) // 2
                     y = h // 2 - len(menu) // 2 + idx
-                    if idx == current_row:
+                    if idx == currentRow:
                         stdscr.addstr(y, x, service, curses.A_REVERSE)
                     else:
                         stdscr.addstr(y, x, service)
@@ -292,29 +339,29 @@ def customPassword(stdscr):
                 key = stdscr.getch()
 
                 if key == curses.KEY_UP:
-                    current_row = (current_row - 1) % len(menu)
+                    currentRow = (currentRow - 1) % len(menu)
                 elif key == curses.KEY_DOWN:
-                    current_row = (current_row + 1) % len(menu)
+                    currentRow = (currentRow + 1) % len(menu)
                 elif key == curses.KEY_ENTER or key in [10, 13]:
-                    if current_row == 0:
+                    if currentRow == 0:
                         password = safePassword(stdscr, password)
                         break
-                    elif current_row == 1:
+                    if currentRow == 1:
                         break
-                elif key == 27: 
-                    break
-        
+
         stdscr.clear()
         return password
 
 def safePassword(stdscr, password):
-
+    """
+    Creating a password with guidelines
+    """
     while True:
         stdscr.clear()
         stdscr.addstr(0, 0, "Enter you´r desired password: ")
         password = stdscr.getstr().decode('utf-8')
         if len(password) < 8 or len(password) > 30:
-            stdscr.addstr(2, 0, "The password has to be between 8 and 20 caracters! Try again")
+            stdscr.addstr(2, 0, "The password has to be between 8 and 30 caracters! Try again")
             stdscr.getch()
             continue
         if not re.search(r"[A-Z]", password):
@@ -333,6 +380,10 @@ def safePassword(stdscr, password):
             stdscr.addstr(2, 0, "The password has to contain at least one special letter! Try again")
             stdscr.getch()
             continue
+        if checkPawndedApi(stdscr, password):
+            stdscr.addstr(2, 0, "The password has been leaked! Try another one")
+            stdscr.getch()
+            continue
 
         break
 
@@ -343,7 +394,7 @@ def safePassword(stdscr, password):
 
     return password
 
-    
+
 
 def getTime():
     """
@@ -358,48 +409,44 @@ def changeInfo(stdscr, passwordDb):
     """
     Handles the modification of information and forwards to the appropriate function. 
     """
-    encrypted_service = showServices(stdscr, passwordDb)
-    if passwordDb.isInstance(encrypted_service):
-       current_row = 0
-       menu = ["Password","Username","Note","Cancel"]
+    encryptedService = showServices(stdscr, passwordDb)
+    if passwordDb.isInstance(encryptedService):
+        currentRow = 0
+        menu = ["Password","Username","Note","Cancel"]
 
-       while True:
-        stdscr.clear()
-        stdscr.addstr(0, 0, "Which part do you want to change?")
-        h, w = stdscr.getmaxyx()
+        while True:
+            stdscr.clear()
+            stdscr.addstr(0, 0, "Which part do you want to change?")
+            h, w = stdscr.getmaxyx()
 
-        for idx, service in enumerate(menu):
-            x = w // 2 - len(service) // 2
-            y = h // 2 - len(menu) // 2 + idx
-            if idx == current_row:
-                stdscr.addstr(y, x, service, curses.A_REVERSE)
-            else:
-                stdscr.addstr(y, x, service)
+            for idx, service in enumerate(menu):
+                x = w // 2 - len(service) // 2
+                y = h // 2 - len(menu) // 2 + idx
+                if idx == currentRow:
+                    stdscr.addstr(y, x, service, curses.A_REVERSE)
+                else:
+                    stdscr.addstr(y, x, service)
 
-        stdscr.refresh()
+            stdscr.refresh()
 
-        key = stdscr.getch()
+            key = stdscr.getch()
 
-        if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(menu)
-        elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(menu)
-        elif key == curses.KEY_ENTER or key in [10, 13]:
-            if current_row == 0:
-                changePassword(stdscr, passwordDb, encrypted_service)
-                break
-            elif current_row == 1:
-                changeUsername(stdscr, passwordDb, encrypted_service)
-                break
-            elif current_row == 2:
-                changeNote(stdscr, passwordDb, encrypted_service)
-                break
-            elif current_row == 3:
-                break
-        elif key == 27: 
-            break
-
-    return None
+            if key == curses.KEY_UP:
+                currentRow = (currentRow - 1) % len(menu)
+            elif key == curses.KEY_DOWN:
+                currentRow = (currentRow + 1) % len(menu)
+            elif key == curses.KEY_ENTER or key in [10, 13]:
+                if currentRow == 0:
+                    changePassword(stdscr, passwordDb, encryptedService)
+                    break
+                if currentRow == 1:
+                    changeUsername(stdscr, passwordDb, encryptedService)
+                    break
+                if currentRow == 2:
+                    changeNote(stdscr, passwordDb, encryptedService)
+                    break
+                if currentRow == 3:
+                    break
 
 def changePassword(stdscr, passwordDb, service):
     """
@@ -409,12 +456,11 @@ def changePassword(stdscr, passwordDb, service):
     stdscr.clear()
     newPassword = customPassword(stdscr)
     decryptedService = passwordDb.decryptService(service)
-    time = getTime()
 
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(decryptedService, record['username'], newPassword, record['note'], time)
+        passwordDb.addPassword(decryptedService, record['username'], newPassword, record['note'])
         passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Password updated successfully.")
     else:
@@ -430,13 +476,12 @@ def changeUsername(stdscr, passwordDb, service):
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new username: ")
-    new_username = stdscr.getstr().decode('utf-8')
+    newUsername = stdscr.getstr().decode('utf-8')
     decryptedService = passwordDb.decryptService(service)
-    time = getTime()
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(decryptedService, new_username, record['password'], record['note'], time)
+        passwordDb.addPassword(decryptedService, newUsername, record['password'], record['note'])
         passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Username updated successfully.")
     else:
@@ -452,13 +497,12 @@ def changeNote(stdscr, passwordDb, service):
     curses.echo()
     stdscr.clear()
     stdscr.addstr(0, 0, "Enter new note: ")
-    new_note = stdscr.getstr().decode('utf-8')
+    newNote = stdscr.getstr().decode('utf-8')
     decryptedService = passwordDb.decryptService(service)
-    time = getTime()
 
     if passwordDb.isInstance(service):
         record = passwordDb.retrievePassword(service)
-        passwordDb.addPassword(decryptedService, record['username'], record['password'], new_note, time)
+        passwordDb.addPassword(decryptedService, record['username'], record['password'], newNote)
         passwordDb.deletePassword(service)
         stdscr.addstr(1, 0, "Note updated successfully.")
     else:
@@ -480,16 +524,16 @@ def passwordSelector(stdscr):
         try:
             length = int(stdscr.getstr().decode('utf-8'))
             if 8 <= length <= 30:
-                break 
-            else:
-                stdscr.addstr(2, 0, "Please enter a number between 8 and 20.")
+                break
+
+            stdscr.addstr(2, 0, "Please enter a number between 8 and 30.")
         except ValueError:
             stdscr.addstr(2, 0, "Invalid input. Please enter a number.")
-        
-        stdscr.refresh()
-        stdscr.getch() 
 
-    current_row = 0
+        stdscr.refresh()
+        stdscr.getch()
+
+    currentRow = 0
     stdscr.clear()
     menu = ["Strong Password", "Medium Password"]
 
@@ -500,7 +544,7 @@ def passwordSelector(stdscr):
         for idx, service in enumerate(menu):
             x = w // 2 - len(service) // 2
             y = h // 2 - len(menu) // 2 + idx
-            if idx == current_row:
+            if idx == currentRow:
                 stdscr.addstr(y, x, service, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, service)
@@ -510,12 +554,12 @@ def passwordSelector(stdscr):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(menu)
+            currentRow = (currentRow - 1) % len(menu)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(menu)
+            currentRow = (currentRow + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            return passwordGenerator(current_row, length)
-        elif key == 27: 
+            return passwordGenerator(currentRow, length)
+        elif key == 27:
             break
 
     return None
@@ -526,26 +570,26 @@ def passwordGenerator(safetyLevel, length):
     """
     if safetyLevel == 0:
         caracters = string.ascii_letters + string.digits + string.punctuation
-    
+
     elif safetyLevel == 1:
         caracters = string.ascii_letters + string.digits
 
     else:
         return None
-    
+
     password = ''.join(random.choice(caracters) for _ in range(length))
     return password
-    
+
 
 def showServices(stdscr, passwordDb):
     """
     shows the services that are registered
     """
     services = passwordDb.getServices()
-    encrypted_services = list(passwordDb.passwords.keys())
-    current_row = 0
+    encryptedServices = list(passwordDb.passwords.keys())
+    currentRow = 0
 
-    if len(encrypted_services) < 1 :
+    if len(encryptedServices) < 1 :
         stdscr.clear()
         stdscr.addstr(0,0, "No passwords registered! Add one and try again.")
         stdscr.refresh()
@@ -559,7 +603,7 @@ def showServices(stdscr, passwordDb):
         for idx, service in enumerate(services):
             x = w // 2 - len(service) // 2
             y = h // 2 - len(services) // 2 + idx
-            if idx == current_row:
+            if idx == currentRow:
                 stdscr.addstr(y, x, service, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, service)
@@ -569,12 +613,12 @@ def showServices(stdscr, passwordDb):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(services)
+            currentRow = (currentRow - 1) % len(services)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(services)
+            currentRow = (currentRow + 1) % len(services)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            return encrypted_services[current_row]
-        elif key == 27: 
+            return encryptedServices[currentRow]
+        elif key == 27:
             break
 
     return None
@@ -585,7 +629,7 @@ def startScreen(stdscr):
     Starting screen
     """
     menu = ["1. Login", "2. Create a new user", "3. Exit"]
-    current_row = 0
+    currentRow = 0
 
     while True:
         stdscr.clear()
@@ -594,7 +638,7 @@ def startScreen(stdscr):
         for idx, row in enumerate(menu):
             x = w // 2 - len(row) // 2
             y = h // 2 - len(menu) // 2 + idx
-            if idx == current_row:
+            if idx == currentRow:
                 stdscr.addstr(y, x, row, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, row)
@@ -604,12 +648,12 @@ def startScreen(stdscr):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(menu)
+            currentRow = (currentRow - 1) % len(menu)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(menu)
+            currentRow = (currentRow + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            return current_row
-        elif key == 27:  
+            return currentRow
+        elif key == 27:
             break
 
     return None
@@ -629,11 +673,11 @@ def loginScreen(stdscr, userManager):
 
     if userManager.authenticate(username, password):
         return username
-    else:
-        stdscr.addstr(3, 0, "Invalid credentials. Press any key to return to the main menu.")
-        stdscr.refresh()
-        stdscr.getch()
-        return None
+
+    stdscr.addstr(3, 0, "Invalid credentials. Press any key to return to the main menu.")
+    stdscr.refresh()
+    stdscr.getch()
+    return None
 
 
 def createUserScreen(stdscr, userManager):
@@ -658,17 +702,17 @@ def createUserScreen(stdscr, userManager):
         stdscr.addstr(3, 0, "User created successfully! Press any key to login.")
     else:
         stdscr.addstr(3, 0, "User creation failed (username might already exist). Press any key to return to the main menu.")
-    
+
     stdscr.refresh()
     stdscr.getch()
 
 
-def mainMenu(stdscr, userName, passwordDb):
+def mainMenu(stdscr, passwordDb):
     """
     Main menu screen
     """
     menu = ['Add Password', 'Retrieve Password', 'Delete Password', 'Change Info', 'Logout']
-    current_row = 0
+    currentRow = 0
 
     while True:
         stdscr.clear()
@@ -677,7 +721,7 @@ def mainMenu(stdscr, userName, passwordDb):
         for idx, row in enumerate(menu):
             x = w // 2 - len(row) // 2
             y = h // 2 - len(menu) // 2 + idx
-            if idx == current_row:
+            if idx == currentRow:
                 stdscr.addstr(y, x, row, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, row)
@@ -687,44 +731,28 @@ def mainMenu(stdscr, userName, passwordDb):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(menu)
+            currentRow = (currentRow - 1) % len(menu)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(menu)
+            currentRow = (currentRow + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            if current_row == 0:
+            if currentRow == 0:
                 addPassword(stdscr, passwordDb)
-            elif current_row == 1:
+            elif currentRow == 1:
                 retrievePassword(stdscr, passwordDb)
-            elif current_row == 2:
+            elif currentRow == 2:
                 deletePassword(stdscr, passwordDb)
-            elif current_row == 3:
+            elif currentRow == 3:
                 changeInfo(stdscr, passwordDb)
-            elif current_row == 4:
+            elif currentRow == 4:
                 break
-        elif key == 27:  # Escape key
-            break
 
-
-def addPassword(stdscr, passwordDb):
+def checkService(stdscr, service, passwordDb):
     """
-    Handles the creation of a new password
+    if Service is registered it lets change the info
     """
-    curses.echo()
-    
-    while True:
-        stdscr.clear()
-        stdscr.addstr(0, 0, "Enter service/website: ")
-        service = stdscr.getstr().decode('utf-8')
-        if len(service) < 1 :
-            stdscr.clear()
-            stdscr.addstr(0,0, "Your service has to have at least one letter! Try again")
-            stdscr.getch()
-            continue
-        break
-
-    services = passwordDb.getServices() 
+    services = passwordDb.getServices()
     if service in services:
-        current_row = 0
+        currentRow = 0
         menu = ["Yes", "No"]
         while True:
             stdscr.clear()
@@ -734,7 +762,7 @@ def addPassword(stdscr, passwordDb):
             for idx, row in enumerate(menu):
                 x = w // 2 - len(row) // 2
                 y = h // 2 - len(menu) // 2 + idx
-                if idx == current_row:
+                if idx == currentRow:
                     stdscr.addstr(y, x, row, curses.A_REVERSE)
                 else:
                     stdscr.addstr(y, x, row)
@@ -744,40 +772,31 @@ def addPassword(stdscr, passwordDb):
             key = stdscr.getch()
 
             if key == curses.KEY_UP:
-                current_row = (current_row - 1) % len(menu)
+                currentRow = (currentRow - 1) % len(menu)
             elif key == curses.KEY_DOWN:
-                current_row = (current_row + 1) % len(menu)
+                currentRow = (currentRow + 1) % len(menu)
             elif key == curses.KEY_ENTER or key in [10, 13]:
-                if current_row == 0:
+                if currentRow == 0:
                     changeInfo(stdscr, passwordDb)
                     return
-                elif current_row == 1:
+                if currentRow == 1:
                     stdscr.clear()
-                    return
-            elif key == 27:  # Escape key
+                    mainMenu(stdscr, passwordDb)
+            elif key == 27:
                 break
- 
-    while True:
-        stdscr.addstr(0, 0, "Enter your desired username: ")
-        username = stdscr.getstr().decode('utf-8')
-        if len(username) < 1 :
-            stdscr.clear()
-            stdscr.addstr(0,0, "Your username has to have at least one letter! Try again")
-            stdscr.getch()
-            continue
-        break
-    
-    passwordMenu = ["Enter Custom Password", "Generate Password"]
-    current_row = 0
 
+def passwordMenu(stdscr):
+    """Menu fpr the selection of custom or auto password"""
+    menu = ["Enter Custom Password", "Generate Password"]
+    currentRow = 0
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
 
-        for idx, row in enumerate(passwordMenu):
+        for idx, row in enumerate(menu):
             x = w // 2 - len(row) // 2
-            y = h // 2 - len(passwordMenu) // 2 + idx
-            if idx == current_row:
+            y = h // 2 - len(menu) // 2 + idx
+            if idx == currentRow:
                 stdscr.addstr(y, x, row, curses.A_REVERSE)
             else:
                 stdscr.addstr(y, x, row)
@@ -787,24 +806,57 @@ def addPassword(stdscr, passwordDb):
         key = stdscr.getch()
 
         if key == curses.KEY_UP:
-            current_row = (current_row - 1) % len(passwordMenu)
+            currentRow = (currentRow - 1) % len(menu)
         elif key == curses.KEY_DOWN:
-            current_row = (current_row + 1) % len(passwordMenu)
+            currentRow = (currentRow + 1) % len(menu)
         elif key == curses.KEY_ENTER or key in [10, 13]:
-            if current_row == 0:
+            if currentRow == 0:
                 password = customPassword(stdscr)
                 break
-            elif current_row == 1:
+            if currentRow == 1:
                 password = passwordSelector(stdscr)
                 break
         elif key == 27:  # Escape key
             break
-    
+
+    return password
+
+def addPassword(stdscr, passwordDb):
+    """
+    Handles the creation of a new password
+    """
+    curses.echo()
+
+    while True:
+        stdscr.clear()
+        stdscr.addstr(0, 0, "Enter service/website: ")
+        service = stdscr.getstr().decode('utf-8')
+        if len(service) < 1 :
+            stdscr.clear()
+            stdscr.addstr(0,0, "Your service has to have at least one letter! Try again")
+            stdscr.getch()
+            stdscr.clear()
+            continue
+        break
+
+    checkService(stdscr, service, passwordDb)
+
+    while True:
+        stdscr.addstr(0, 0, "Enter your desired username: ")
+        username = stdscr.getstr().decode('utf-8')
+        if len(username) < 1 :
+            stdscr.clear()
+            stdscr.addstr(0,0, "Your username has to have at least one letter! Try again")
+            stdscr.getch()
+            stdscr.clear()
+            continue
+        break
+
+    password = passwordMenu(stdscr)
+
     note = addNotes(stdscr)
 
-    timeNow = getTime()
-    
-    passwordDb.addPassword(service, username, password, note, timeNow)
+    passwordDb.addPassword(service, username, password, note)
     stdscr.clear()
     stdscr.addstr(2,0, f"The password '{password}' for '{service}' has been added successfully!")
     stdscr.refresh()
@@ -855,12 +907,12 @@ def main(stdscr):
     userManager = UserManager('users.json')
     while True:
         option = startScreen(stdscr)
-        
+
         if option == 0:
             username = loginScreen(stdscr, userManager)
             if username:
                 passwordDb = PasswordDatabase(f'{username}_passwords.json', EncryptionManager(userManager.getUserPassword(username)))
-                mainMenu(stdscr, username, passwordDb)
+                mainMenu(stdscr, passwordDb)
         elif option == 1:
             createUserScreen(stdscr, userManager)
         elif option == 2:
